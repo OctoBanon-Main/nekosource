@@ -33,7 +33,7 @@ about-description = Дякуємо за користування NekoSource! ^^
 about-copyright = © 2026-н.ч. OctoBanon
 about-development = Розробка:
 contributor-octobanon = — Lead developer
-contributor-shadowcj = — Український переклад & білоруський переклад
+contributor-shadowcj = — Український переклад & білоруський переклад :3
 contributor-xelframe = — Білоруський переклад
 
 # Стан та статуси

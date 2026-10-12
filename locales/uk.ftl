@@ -1,12 +1,12 @@
 # Головний екран та елементи інтерфейсу
 title-mock = 🐱 NekoSource
-btn-refresh = 🔄 Оновити
-btn-clone = 📥 Клонувати
-btn-settings = ⚙ Налаштування
-btn-about = ℹ Про програму
+btn-refresh = Оновити
+btn-clone = Клонувати
+btn-settings = Налаштування
+btn-about = Про програму
 btn-close = Закрити
-btn-delete = 🗑 Видалити вибране
-btn-commit = 🚀 Опублікувати зміни
+btn-delete = Видалити вибране
+btn-commit = Опублікувати зміни
 btn-save = Зберегти
 btn-ok = ОК
 btn-cancel = Скасувати
@@ -19,24 +19,31 @@ label-selected-repo = Вибраний репозиторій:
 label-commit-msg = Повідомлення коміту:
 label-username = Ім'я користувача:
 label-email = Email:
-label-gpg = 🔒 Підписувати коміти через GPG
+label-gpg = Підписувати коміти через GPG
+label-language = Мова:
+label-dark-theme = Темна тема
 label-gpg-id = ID GPG Ключа:
 label-recent-commits = Недавні коміти
+label-changed-files = Змінені файли
 
 placeholder-select = Виберіть репозиторій зі списку зліва для керування змінами
 placeholder-no-commits = Поки що немає комітів
+placeholder-no-changes = Робоче дерево чисте
 
 # Вікно "Профіль" та "Про програму"
-settings-title = ⚙ Налаштування користувача Git
-about-title = ℹ Про програму NekoSource
+settings-title = Налаштування
+about-title = Про програму NekoSource
 about-description = Дякуємо за користування NekoSource! ^^
 about-copyright = © 2026-н.ч. OctoBanon
 about-development = Розробка:
-contributor-octobanon = — Lead developer
-contributor-shadowcj = — Український переклад & білоруський переклад
-contributor-xelframe = — Білоруський переклад
+contributor-octobanon = - Lead developer
+contributor-shadowcj = - Український переклад & білоруський переклад
+contributor-xelframe = - Білоруський переклад
 
 # Стан та статуси
+status-loading = Виконання
+status-success = Успішно
+status-error = Помилка
 status-cloning = Клонування...
 status-committing = Коміт...
 gpg-no-keys = Ключів не знайдено
@@ -79,3 +86,6 @@ err-gpg-stdin = Не вдалося записати дані в stdin GPG: { $d
 err-gpg-wait = Помилка під час очікування процесу GPG: { $detail }
 err-gpg-failure = GPG завершився з помилкою: { $detail }
 err-gpg-encoding = Вивід GPG містить некоректний UTF-8: { $detail }
+workspace-title = Ваш робочий простір Git
+placeholder-no-repos = Репозиторіїв поки немає. Клонуйте перший за допомогою рядка вгорі.
+publish-hint = Усі зміни буде включено до коміту й надіслано на сервер.

@@ -1,10 +1,10 @@
+use super::super::error::{NekoError, NekoResult};
 use ssh_key::{LineEnding, PrivateKey};
 use std::{
     io::Write,
+    os::windows::process::CommandExt,
     path::{Path, PathBuf},
-    os::windows::process::CommandExt
 };
-use super::super::error::{NekoError, NekoResult};
 
 const MAX_PASSPHRASE_RETRIES: usize = 3;
 
@@ -47,12 +47,12 @@ pub fn prepare_ssh_key(
         let key_path_str = key_path.to_string_lossy().into_owned();
 
         let raw = match std::fs::read_to_string(&key_path) {
-            Ok(s)  => s,
+            Ok(s) => s,
             Err(_) => continue,
         };
 
         let private_key = match PrivateKey::from_openssh(&raw) {
-            Ok(k)  => k,
+            Ok(k) => k,
             Err(_) => continue,
         };
 
@@ -61,10 +61,13 @@ pub fn prepare_ssh_key(
 
             for _ in 0..MAX_PASSPHRASE_RETRIES {
                 match request_passphrase(key_path_str.clone()) {
-                    None     => return Err(NekoError::SshPassphraseCancelled),
+                    None => return Err(NekoError::SshPassphraseCancelled),
                     Some(pp) => {
                         match private_key.decrypt(pp.as_bytes()) {
-                            Ok(k)  => { result = Some(k); break; }
+                            Ok(k) => {
+                                result = Some(k);
+                                break;
+                            }
                             Err(_) => { /* wrong passphrase -> loop */ }
                         }
                     }
@@ -73,39 +76,49 @@ pub fn prepare_ssh_key(
 
             match result {
                 Some(k) => k,
-                None    => continue,
+                None => continue,
             }
         } else {
             private_key
         };
 
         let pem = match ready_key.to_openssh(LineEnding::LF) {
-            Ok(p)  => p,
+            Ok(p) => p,
             Err(_) => continue,
         };
 
-        let tmp_path = std::env::temp_dir()
-            .join(format!("nekosource_{}.key", std::process::id()));
+        let (tmp_path, mut f) = (0..100)
+            .find_map(|attempt| {
+                let path = std::env::temp_dir().join(format!(
+                    "nekosource_{}_{}.key",
+                    std::process::id(),
+                    attempt
+                ));
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                    .ok()
+                    .map(|file| (path, file))
+            })
+            .ok_or_else(|| NekoError::GitClone("Unable to create temporary SSH key".into()))?;
+        let temp_key = TempKey { path: tmp_path };
 
+        #[cfg(unix)]
         {
-            let mut f = std::fs::File::create(&tmp_path)
-                .map_err(|e| NekoError::GitClone(e.to_string()))?;
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                f.set_permissions(std::fs::Permissions::from_mode(0o600))
-                    .map_err(|e| NekoError::GitClone(e.to_string()))?;
-            }
-
-            f.write_all(pem.as_bytes())
+            use std::os::unix::fs::PermissionsExt;
+            f.set_permissions(std::fs::Permissions::from_mode(0o600))
                 .map_err(|e| NekoError::GitClone(e.to_string()))?;
         }
 
-        #[cfg(windows)]
-        restrict_key_permissions_windows(&tmp_path);
+        f.write_all(pem.as_bytes())
+            .map_err(|e| NekoError::GitClone(e.to_string()))?;
+        drop(f);
 
-        return Ok(Some(TempKey { path: tmp_path }));
+        #[cfg(windows)]
+        restrict_key_permissions_windows(temp_key.path());
+
+        return Ok(Some(temp_key));
     }
 
     Ok(None)
@@ -117,17 +130,12 @@ pub fn build_ssh_command(key_path: &Path) -> String {
     #[cfg(windows)]
     {
         let fwd = raw.replace('\\', "/");
-        format!(
-            "ssh -i \"{}\" -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
-            fwd
-        )
+        format!("ssh -i \"{}\" -o StrictHostKeyChecking=accept-new", fwd)
     }
     #[cfg(not(windows))]
     {
-        format!(
-            "ssh -i '{}' -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
-            raw
-        )
+        let escaped = raw.replace('\'', "'\"'\"'");
+        format!("ssh -i '{}' -o StrictHostKeyChecking=accept-new", escaped)
     }
 }
 
@@ -135,7 +143,7 @@ pub fn build_ssh_command(key_path: &Path) -> String {
 fn restrict_key_permissions_windows(path: &Path) {
     let path_str = match path.to_str() {
         Some(s) => s,
-        None    => return,
+        None => return,
     };
 
     let _ = std::process::Command::new("icacls")

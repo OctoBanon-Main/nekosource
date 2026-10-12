@@ -1,102 +1,309 @@
-use eframe::egui;
-use super::super::state::NekoApp;
+use super::{NekoView, workers};
+use gpui_kit::component::{ActiveTheme, Disableable, button::*, input::Textarea};
+use gpui_kit::{prelude::*, *};
 
-pub fn show_commit_panel(ui: &mut egui::Ui, app: &mut NekoApp) -> bool {
-    if let Some(idx) = app.selected_idx {
-        let path   = app.repos[idx].0.clone();
-        let branch = app.repo_branches.get(idx).cloned().unwrap_or_else(|| "?".into());
-
-        ui.horizontal(|ui| {
-            ui.colored_label(egui::Color32::LIGHT_BLUE, &path);
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new(format!("🔀  {}", branch))
-                    .color(egui::Color32::from_rgb(100, 210, 130))
-                    .monospace(),
-            );
-        });
-        ui.add_space(8.0);
-
-        ui.label(app.t("label-commit-msg"));
-        ui.add_space(4.0);
-        ui.add_sized(
-            [ui.available_width(), 56.0],
-            egui::TextEdit::multiline(&mut app.commit_msg_input),
-        );
-        ui.add_space(4.0);
-        let clicked = ui.add_sized(
-            [ui.available_width(), 26.0],
-            egui::Button::new(app.t("btn-commit")),
-        ).clicked();
-
-        ui.add_space(6.0);
-        ui.separator();
-        ui.add_space(4.0);
-
-        ui.label(
-            egui::RichText::new(app.t("label-recent-commits"))
-                .small()
-                .color(egui::Color32::GRAY),
-        );
-
-        ui.add_space(4.0);
-
-        let remaining_height = ui.available_height().max(0.0);
-
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), remaining_height),
-            egui::Layout::top_down(egui::Align::LEFT),
-            |ui| {
-                ui.set_min_height(remaining_height);
-
-                egui::ScrollArea::vertical()
-                    .id_salt("commit_log_scroll")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.set_min_height(remaining_height);
-
-                        if app.selected_commits.is_empty() {
-                            ui.weak(app.t("placeholder-no-commits"));
-                            return;
-                        }
-
-                        for c in &app.selected_commits {
-                            let row = ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new(&c.short_hash)
-                                        .monospace()
-                                        .color(egui::Color32::from_rgb(130, 170, 230)),
-                                );
-                                ui.add_space(2.0);
-                                ui.label(
-                                    egui::RichText::new(&c.title)
-                                        .color(egui::Color32::WHITE),
-                                );
-                            });
-
-                            row.response.on_hover_text(&c.datetime);
-
-                            ui.horizontal(|ui| {
-                                ui.add_space(6.0);
-                                ui.label(
-                                    egui::RichText::new(format!("{} · {}", c.author, c.time_ago))
-                                        .small()
-                                        .color(egui::Color32::GRAY),
-                                );
-                            });
-
-                            ui.add_space(3.0);
-                        }
-                    });
-            },
-        );
-        clicked
-    } else {
-        ui.add_space(ui.available_height() / 2.0 - 20.0);
-        ui.vertical_centered(|ui| {
-            ui.add(egui::Label::new(app.t("placeholder-select")).wrap());
-        });
-        false
+impl NekoView {
+    pub(super) fn commit_panel(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(idx) = self.app.selected_idx else {
+            return div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .items_center()
+                .justify_center()
+                .gap_4()
+                .p_8()
+                .child(
+                    div()
+                        .text_3xl()
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(cx.theme().foreground)
+                        .child("NekoSource"),
+                )
+                .child(div().text_lg().child(self.app.t("workspace-title")))
+                .child(
+                    div()
+                        .max_w(px(380.0))
+                        .text_center()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(self.app.t("placeholder-select")),
+                )
+                .into_any_element();
+        };
+        let branch = self.app.repo_branches.get(idx);
+        let mut branch_label = branch.map(|b| b.name.as_str()).unwrap_or("?").to_string();
+        if let Some((ahead, behind)) = branch.and_then(|b| b.divergence) {
+            branch_label.push_str(&format!("  ↑{ahead} ↓{behind}"));
+        }
+        let path = &self.app.repos[idx].0;
+        let name = std::path::Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(path);
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_4()
+                    .p_5()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::BOLD)
+                                    .truncate()
+                                    .child(name.to_string()),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .truncate()
+                                    .child(path.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_3()
+                            .py_1()
+                            .rounded_md()
+                            .bg(cx.theme().muted)
+                            .text_color(cx.theme().foreground)
+                            .child(branch_label),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .min_w_0()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .p_5()
+                            .gap_4()
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_between()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child(self.app.t("label-recent-commits")),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(self.app.selected_commits.len().to_string()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .id("commit-log")
+                                    .test_support()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .overflow_y_scroll()
+                                    .when(self.app.selected_commits.is_empty(), |container| {
+                                        container.child(
+                                            div()
+                                                .p_4()
+                                                .rounded_lg()
+                                                .bg(cx.theme().muted)
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(self.app.t("placeholder-no-commits")),
+                                        )
+                                    })
+                                    .children(self.app.selected_commits.iter().map(|commit| {
+                                        div()
+                                            .flex()
+                                            .gap_3()
+                                            .pb_4()
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .flex_col()
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .mt_1()
+                                                            .size(px(8.0))
+                                                            .rounded_full()
+                                                            .bg(cx.theme().muted_foreground),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .w(px(1.0))
+                                                            .flex_1()
+                                                            .bg(cx.theme().border),
+                                                    ),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .flex_col()
+                                                    .min_w_0()
+                                                    .flex_1()
+                                                    .gap_2()
+                                                    .pb_3()
+                                                    .child(
+                                                        div()
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child(commit.title.clone()),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(format!(
+                                                                "{} · {}",
+                                                                commit.author, commit.time_ago
+                                                            )),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .flex()
+                                                            .flex_wrap()
+                                                            .gap_2()
+                                                            .text_xs()
+                                                            .child(
+                                                                div()
+                                                                    .px_2()
+                                                                    .rounded_sm()
+                                                                    .bg(cx.theme().muted)
+                                                                    .text_color(cx.theme().foreground)
+                                                                    .child(
+                                                                        commit.short_hash.clone(),
+                                                                    ),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_color(
+                                                                        cx.theme().muted_foreground,
+                                                                    )
+                                                                    .child(commit.datetime.clone()),
+                                                            ),
+                                                    ),
+                                            )
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .w(px(300.0))
+                            .flex_shrink_0()
+                            .p_5()
+                            .gap_3()
+                            .border_l_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child(self.app.t("label-changed-files")),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .rounded_md()
+                                            .bg(cx.theme().muted)
+                                            .text_xs()
+                                            .child(self.app.selected_changes.len().to_string()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .id("changed-files")
+                                    .test_support()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .overflow_y_scroll()
+                                    .when(self.app.selected_changes.is_empty(), |container| {
+                                        container.child(
+                                            div()
+                                                .py_4()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(self.app.t("placeholder-no-changes")),
+                                        )
+                                    })
+                                    .children(self.app.selected_changes.iter().map(|path| {
+                                        div()
+                                            .py_2()
+                                            .border_b_1()
+                                            .border_color(cx.theme().border)
+                                            .child(path.clone())
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .pt_3()
+                                    .border_t_1()
+                                    .border_color(cx.theme().border)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(self.app.t("label-commit-msg")),
+                            )
+                            .child(
+                                Textarea::new(&self.commit_message)
+                                    .h(px(104.0))
+                                    .disabled(self.app.is_busy())
+                                    .aria_label(self.app.t("label-commit-msg")),
+                            )
+                            .child(
+                                Button::new("commit")
+                                    .primary()
+                                    .label(self.app.t("btn-commit"))
+                                    .disabled(
+                                        self.app.is_busy()
+                                            || self.app.commit_msg_input.trim().is_empty()
+                                            || (self.app.enable_gpg
+                                                && self.app.gpg_key_id.trim().is_empty()),
+                                    )
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        if !this.app.is_busy() {
+                                            workers::spawn_commit(&mut this.app);
+                                            this.commit_message.update(cx, |input, cx| {
+                                                input.set_value("", window, cx)
+                                            });
+                                            this.watch_worker(window, cx);
+                                        }
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(self.app.t("publish-hint")),
+                            ),
+                    ),
+            )
+            .into_any_element()
     }
 }

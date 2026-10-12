@@ -6,9 +6,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.34.2"
 fluent = "0.17.0"
 unic-langid = "0.9.6"
 git2 = "0.20.4"
 chrono = { version = "0.4.44",  features = ["clock"] }
 ssh-key = { version = "0.6.7", features = ["std", "encryption"] }
+gpui-kit = "0.7"

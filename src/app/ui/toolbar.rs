@@ -1,111 +1,107 @@
-use eframe::egui;
-use super::super::{language::Language, state::NekoApp};
+use super::{NekoView, workers};
+use gpui_kit::component::{ActiveTheme, Disableable, button::*, input::Input};
+use gpui_kit::{prelude::*, *};
 
-pub struct ToolbarActions {
-    pub refresh:       bool,
-    pub trigger_clone: bool,
-    pub open_settings: bool,
-    pub open_about:    bool,
-    pub lang_changed:  Option<Language>,
-}
-
-pub fn show_toolbar(ui: &mut egui::Ui, app: &mut NekoApp) -> ToolbarActions {
-    let mut actions = ToolbarActions {
-        refresh:       false,
-        trigger_clone: false,
-        open_settings: false,
-        open_about:    false,
-        lang_changed:  None,
-    };
-
-    let available_width = ui.available_width();
-    let compact = available_width < 640.0;
-
-    if compact {
-        ui.horizontal_wrapped(|ui| {
-            if ui.button(app.t("btn-refresh")).clicked() { actions.refresh = true; }
-            ui.separator();
-            if ui.button(app.t("btn-settings")).clicked() { actions.open_settings = true; }
-            if ui.button(app.t("btn-about")).clicked()    { actions.open_about    = true; }
-            ui.separator();
-            lang_switcher(ui, app, &mut actions);
-        });
-
-        ui.horizontal(|ui| {
-            ui.label(app.t("label-url"));
-
-            let url_w = (ui.available_width() - 184.0).max(60.0);
-            ui.add_sized(
-                [url_w, 20.0],
-                egui::TextEdit::singleline(&mut app.clone_url_input),
-            );
-
-            let hint = app.t("hint-branch");
-            ui.add_sized(
-                [90.0, 20.0],
-                egui::TextEdit::singleline(&mut app.clone_branch_input)
-                    .hint_text(hint),
-            );
-
-            if ui.button(app.t("btn-clone")).clicked() { actions.trigger_clone = true; }
-        });
-    } else {
-        ui.horizontal_wrapped(|ui| {
-            if ui.button(app.t("btn-refresh")).clicked() { actions.refresh = true; }
-            ui.separator();
-
-            ui.label(app.t("label-url"));
-            let url_width = (available_width - 660.0).clamp(80.0, 260.0);
-            ui.add_sized(
-                [url_width, 20.0],
-                egui::TextEdit::singleline(&mut app.clone_url_input),
-            );
-
-            let hint = app.t("hint-branch");
-            ui.add_sized(
-                [90.0, 20.0],
-                egui::TextEdit::singleline(&mut app.clone_branch_input)
-                    .hint_text(hint),
-            );
-
-            if ui.button(app.t("btn-clone")).clicked() { actions.trigger_clone = true; }
-            ui.separator();
-            if ui.button(app.t("btn-settings")).clicked() { actions.open_settings = true; }
-            if ui.button(app.t("btn-about")).clicked()    { actions.open_about    = true; }
-            ui.separator();
-            lang_switcher(ui, app, &mut actions);
-        });
+impl NekoView {
+    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_5()
+                    .py_3()
+                    .child(
+                        div()
+                            .id("app-title")
+                            .test_support()
+                            .flex_1()
+                            .text_lg()
+                            .font_weight(FontWeight::BOLD)
+                            .child("🐱 NekoSource"),
+                    )
+                    .child(
+                        Button::new("refresh")
+                            .ghost()
+                            .label(self.app.t("btn-refresh"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.app.refresh_all_branches();
+                                this.app.refresh_selected_log();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("settings")
+                            .ghost()
+                            .label(self.app.t("btn-settings"))
+                            .disabled(self.app.is_busy())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_settings_dialog(window, cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("about")
+                            .ghost()
+                            .label(self.app.t("btn-about"))
+                            .disabled(self.app.is_busy())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_about_dialog(window, cx)
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_5()
+                    .py_3()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(self.app.t("label-url")),
+                    )
+                    .child(
+                        div()
+                            .id("clone-url")
+                            .test_support()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                Input::new(&self.clone_url)
+                                    .disabled(self.app.is_busy())
+                                    .aria_label(self.app.t("label-url")),
+                            ),
+                    )
+                    .child(
+                        div().id("clone-branch").test_support().w(px(140.0)).child(
+                            Input::new(&self.clone_branch)
+                                .disabled(self.app.is_busy())
+                                .aria_label(self.app.t("hint-branch")),
+                        ),
+                    )
+                    .child(
+                        Button::new("clone")
+                            .primary()
+                            .label(self.app.t("btn-clone"))
+                            .disabled(
+                                self.app.is_busy() || self.app.clone_url_input.trim().is_empty(),
+                            )
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if !this.app.is_busy() {
+                                    workers::spawn_clone(&mut this.app);
+                                    if this.app.is_busy() {
+                                        this.watch_worker(window, cx);
+                                    }
+                                }
+                            })),
+                    ),
+            )
     }
-
-    actions
-}
-
-fn lang_switcher(ui: &mut egui::Ui, app: &mut NekoApp, actions: &mut ToolbarActions) {
-    const LANGUAGES: &[(Language, &str, &str)] = &[
-        (Language::Ru, "🇷🇺 RU", "🇷🇺 Русский"),
-        (Language::En, "🇬🇧 EN", "🇬🇧 English"),
-        (Language::Uk, "🇺🇦 UA", "🇺🇦 Українська"),
-        (Language::Be, "🇧🇾 BY", "🇧🇾 Беларуская"),
-    ];
-
-    let selected_label = LANGUAGES
-        .iter()
-        .find(|(lang, _, _)| *lang == app.current_lang)
-        .map(|(_, short, _)| *short)
-        .unwrap_or("🌐 LA");
-
-    egui::ComboBox::from_id_salt("lang_switcher")
-        .width(85.0)
-        .selected_text(selected_label)
-        .show_ui(ui, |ui| {
-            LANGUAGES.iter().for_each(|&(lang, _, long_label)| {
-                let clicked = ui
-                    .selectable_value(&mut app.current_lang, lang, long_label)
-                    .clicked();
-
-                clicked
-                    .then_some(lang)
-                    .map(|changed_lang| actions.lang_changed = Some(changed_lang));
-            });
-        });
 }

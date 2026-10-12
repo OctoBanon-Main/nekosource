@@ -1,12 +1,15 @@
 # Main UI Elements
+workspace-title = Your Git workspace
+placeholder-no-repos = No repositories yet. Clone your first repository above.
+publish-hint = All changes will be committed and pushed to the remote.
 title-mock = 🐱 NekoSource
-btn-refresh = 🔄 Refresh
-btn-clone = 📥 Clone
-btn-settings = ⚙ Settings
-btn-about = ℹ About
+btn-refresh = Refresh
+btn-clone = Clone
+btn-settings = Settings
+btn-about = About
 btn-close = Close
-btn-delete = 🗑 Delete Selected
-btn-commit = 🚀 Publish Changes
+btn-delete = Delete Selected
+btn-commit = Publish Changes
 btn-save = Save
 btn-ok = OK
 btn-cancel = Cancel
@@ -19,24 +22,31 @@ label-selected-repo = Selected Repository:
 label-commit-msg = Commit Message:
 label-username = Username:
 label-email = Email:
-label-gpg = 🔒 Sign commits via GPG
+label-gpg = Sign commits via GPG
+label-language = Language:
+label-dark-theme = Dark theme
 label-gpg-id = GPG Key ID:
 label-recent-commits = Recent commits
+label-changed-files = Changed files
 
 placeholder-select = Select a repository from the list on the left to manage changes
 placeholder-no-commits = No commits yet
+placeholder-no-changes = Working tree clean
 
 # Profile & About Windows
-settings-title = ⚙ Git Profile Settings
-about-title = ℹ About NekoSource
+settings-title = Settings
+about-title = About NekoSource
 about-description = Thanks for using NekoSource! ^^
 about-copyright = © 2026-present OctoBanon
 about-development = Development:
-contributor-octobanon = — Lead developer
-contributor-shadowcj = — Ukrainian translation & belarusian translation
-contributor-xelframe = — Belarusian translation
+contributor-octobanon = - Lead developer
+contributor-shadowcj = - Ukrainian translation & belarusian translation
+contributor-xelframe = - Belarusian translation
 
 # Statuses & GPG keys
+status-loading = Working
+status-success = Success
+status-error = Error
 status-cloning = Cloning...
 status-committing = Committing...
 gpg-no-keys = No keys found

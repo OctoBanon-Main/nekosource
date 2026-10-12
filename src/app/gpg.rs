@@ -5,10 +5,12 @@ use super::error::{NekoError, NekoResult};
 
 pub fn sign(data: &str, key_id: &str) -> NekoResult<String> {
     let mut child = Command::new("gpg")
-        .args(&[
-            "--status-fd", "2",
+        .args([
+            "--status-fd",
+            "2",
             "--bsign",
-            "--local-user", key_id,
+            "--local-user",
+            key_id,
             "--armor",
         ])
         .stdin(Stdio::piped())
@@ -18,16 +20,17 @@ pub fn sign(data: &str, key_id: &str) -> NekoResult<String> {
         .map_err(|e| NekoError::GpgLaunch(e.to_string()))?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(data.as_bytes())
+        stdin
+            .write_all(data.as_bytes())
             .map_err(|e| NekoError::GpgStdinWrite(e.to_string()))?;
     }
 
-    let output = child.wait_with_output()
+    let output = child
+        .wait_with_output()
         .map_err(|e| NekoError::GpgWait(e.to_string()))?;
 
     if output.status.success() {
-        String::from_utf8(output.stdout)
-            .map_err(|e| NekoError::GpgOutputEncoding(e.to_string()))
+        String::from_utf8(output.stdout).map_err(|e| NekoError::GpgOutputEncoding(e.to_string()))
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         Err(NekoError::GpgFailure(stderr))
@@ -36,10 +39,10 @@ pub fn sign(data: &str, key_id: &str) -> NekoResult<String> {
 
 pub fn list_keys() -> Vec<(String, String)> {
     let output = match Command::new("gpg")
-        .args(&["--list-secret-keys", "--with-colons", "--keyid-format=long"])
+        .args(["--list-secret-keys", "--with-colons", "--keyid-format=long"])
         .output()
     {
-        Ok(o)  => o,
+        Ok(o) => o,
         Err(_) => return vec![],
     };
 

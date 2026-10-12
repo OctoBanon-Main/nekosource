@@ -1,61 +1,115 @@
-use eframe::egui;
-use super::super::state::NekoApp;
+use super::NekoView;
+use gpui_kit::component::{ActiveTheme, Disableable, Selectable, button::*};
+use gpui_kit::{prelude::*, *};
 
-pub fn show_repo_list(ui: &mut egui::Ui, app: &mut NekoApp) {
-    ui.label(
-        egui::RichText::new(app.t("label-local-repos"))
-            .heading(),
-    );
-    ui.add_space(8.0);
-
-    egui::ScrollArea::vertical()
-        .id_salt("repo_list_scroll")
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            egui::Grid::new("repos_table")
-                .striped(true)
-                .num_columns(3)
-                .min_col_width(60.0)
-                .show(ui, |ui| {
-                    for (idx, (path, url)) in app.repos.iter().enumerate() {
-                        let selected = Some(idx) == app.selected_idx;
-
-                        if ui.selectable_label(selected, path).clicked() {
-                            app.selected_idx = Some(idx);
+impl NekoView {
+    pub(super) fn repo_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .w(px(250.0))
+            .flex_shrink_0()
+            .p_4()
+            .gap_4()
+            .border_r_1()
+            .border_color(cx.theme().border)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(cx.theme().muted_foreground)
+                            .child(self.app.t("label-local-repos")),
+                    )
+                    .child(div().text_xs().child(self.app.repos.len().to_string())),
+            )
+            .child(
+                div()
+                    .id("repo-list")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .when(self.app.repos.is_empty(), |container| {
+                        container.child(
+                            div()
+                                .py_4()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(self.app.t("placeholder-no-repos")),
+                        )
+                    })
+                    .children(self.app.repos.iter().enumerate().map(|(idx, (path, url))| {
+                        let branch = self.app.repo_branches.get(idx);
+                        let mut branch_label =
+                            branch.map(|b| b.name.as_str()).unwrap_or("?").to_string();
+                        if let Some((ahead, behind)) = branch.and_then(|b| b.divergence) {
+                            branch_label.push_str(&format!("  ↑{ahead} ↓{behind}"));
                         }
-
-                        let branch = app.repo_branches
-                            .get(idx)
-                            .map(|s| s.as_str())
-                            .unwrap_or("?");
-
-                        ui.label(
-                            egui::RichText::new(format!("🔀  {}", branch))
-                                .monospace()
-                                .color(egui::Color32::from_rgb(100, 210, 130)),
-                        );
-
-                        ui.add(egui::Label::new(
-                            egui::RichText::new(url).color(egui::Color32::GRAY),
-                        ).truncate());
-
-                        ui.end_row();
-                    }
-                });
-        });
-
-    ui.add_space(8.0);
-
-    if let Some(idx) = app.selected_idx {
-        if ui.button(app.t("btn-delete")).clicked() {
-            app.repos.remove(idx);
-            if idx < app.repo_branches.len() {
-                app.repo_branches.remove(idx);
-            }
-            app.selected_idx     = None;
-            app.log_loaded_for   = None;
-            app.selected_commits.clear();
-            app.save_repos();
-        }
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .p_3()
+                            .mb_2()
+                            .rounded_lg()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .bg(if self.app.selected_idx == Some(idx) {
+                                cx.theme().muted
+                            } else {
+                                cx.theme().background
+                            })
+                            .child(
+                                Button::new(("repo", idx))
+                                    .ghost()
+                                    .w_full()
+                                    .label(
+                                        std::path::Path::new(path)
+                                            .file_name()
+                                            .and_then(|name| name.to_str())
+                                            .unwrap_or(path)
+                                            .to_string(),
+                                    )
+                                    .selected(self.app.selected_idx == Some(idx))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.app.selected_idx = Some(idx);
+                                        this.app.refresh_selected_log();
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(branch_label),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .truncate()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(url.clone()),
+                            )
+                    })),
+            )
+            .child(
+                Button::new("delete-repo")
+                    .label(self.app.t("btn-delete"))
+                    .disabled(self.app.selected_idx.is_none() || self.app.is_busy())
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if let Some(idx) = this.app.selected_idx.take() {
+                            this.app.repos.remove(idx);
+                            if idx < this.app.repo_branches.len() {
+                                this.app.repo_branches.remove(idx);
+                            }
+                            this.app.refresh_selected_log();
+                            this.app.save_repos();
+                            cx.notify();
+                        }
+                    })),
+            )
     }
 }

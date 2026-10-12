@@ -1,10 +1,12 @@
+use super::super::error::{NekoError, NekoResult};
 use git2::Config;
 use std::path::{Path, PathBuf};
-use super::super::error::{NekoError, NekoResult};
 
 pub fn read_user_config() -> (String, String) {
-    let cfg   = Config::open_default().unwrap_or_else(|_| Config::new().unwrap());
-    let name  = cfg.get_string("user.name").unwrap_or_default();
+    let Ok(cfg) = Config::open_default().or_else(|_| Config::new()) else {
+        return (String::new(), String::new());
+    };
+    let name = cfg.get_string("user.name").unwrap_or_default();
     let email = cfg.get_string("user.email").unwrap_or_default();
     (name, email)
 }
@@ -14,8 +16,8 @@ pub fn write_user_config(name: &str, email: &str) -> NekoResult<()> {
         .or_else(|_| Config::find_xdg())
         .map_err(|e| NekoError::GitConfigNotFound(e.message().to_string()))?;
 
-    let mut cfg = Config::open(&path)
-        .map_err(|e| NekoError::GitConfigOpen(e.message().to_string()))?;
+    let mut cfg =
+        Config::open(&path).map_err(|e| NekoError::GitConfigOpen(e.message().to_string()))?;
 
     cfg.set_str("user.name", name)
         .map_err(|e| NekoError::GitConfigWriteName(e.message().to_string()))?;
@@ -39,7 +41,7 @@ fn repos_file_path() -> PathBuf {
 pub fn load_repos() -> Vec<(String, String)> {
     let path = repos_file_path();
     let content = match std::fs::read_to_string(&path) {
-        Ok(c)  => c,
+        Ok(c) => c,
         Err(_) => return vec![],
     };
 
@@ -48,7 +50,7 @@ pub fn load_repos() -> Vec<(String, String)> {
         .filter_map(|line| {
             let mut parts = line.splitn(2, '\t');
             let repo_path = parts.next()?.trim();
-            let url       = parts.next().unwrap_or("").trim();
+            let url = parts.next().unwrap_or("").trim();
             if repo_path.is_empty() {
                 return None;
             }

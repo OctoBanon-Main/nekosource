@@ -1,79 +1,77 @@
-use eframe::egui;
-use super::super::super::state::NekoApp;
+use crate::app::ui::NekoView;
+use gpui_kit::component::{WindowExt, button::*, input::Input};
+use gpui_kit::{prelude::*, *};
 
-pub fn show_passphrase_dialog(ctx: &egui::Context, app: &mut NekoApp) {
-    if !app.show_passphrase_dialog { return; }
-
-    let mut submitted = false;
-    let mut cancelled = false;
-
-    egui::Window::new(app.t("passphrase-title"))
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .collapsible(false)
-        .resizable(false)
-        .min_width(360.0)
-        .show(ctx, |ui| {
-            ui.add_space(4.0);
-            ui.label(app.t("passphrase-prompt"));
-            ui.add_space(4.0);
-
-            if !app.passphrase_key_path.is_empty() {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("🔑")
-                    );
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(&app.passphrase_key_path)
-                                .monospace()
-                                .color(egui::Color32::from_rgb(130, 170, 230)),
-                        ).truncate()
-                    );
-                });
-                ui.add_space(2.0);
-            }
-
-            ui.label(
-                egui::RichText::new(app.t("passphrase-hint"))
-                    .small()
-                    .color(egui::Color32::GRAY),
-            );
-            ui.add_space(8.0);
-
-            let response = ui.add(
-                egui::TextEdit::singleline(&mut app.passphrase_input)
-                    .password(true)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("••••••••"),
-            );
-            response.request_focus();
-
-            if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                submitted = true;
-            }
-
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                if ui.button(app.t("btn-ok")).clicked()     { submitted = true; }
-                if ui.button(app.t("btn-cancel")).clicked() { cancelled = true; }
-            });
-            ui.add_space(4.0);
+impl NekoView {
+    pub(in crate::app::ui) fn show_passphrase_dialog(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let view = cx.entity();
+        window.open_dialog(cx, move |dialog, _, cx| {
+            view.update(cx, |this, cx| {
+                dialog
+                    .title(this.app.t("passphrase-title"))
+                    .overlay_closable(false)
+                    .close_button(false)
+                    .keyboard(false)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_3()
+                            .child(this.app.t("passphrase-prompt"))
+                            .child(this.app.passphrase_key_path.clone())
+                            .child(this.app.t("passphrase-hint"))
+                            .child(
+                                Input::new(&this.passphrase)
+                                    .aria_label(this.app.t("passphrase-prompt")),
+                            ),
+                    )
+                    .footer(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new("submit-passphrase")
+                                    .primary()
+                                    .label(this.app.t("btn-ok"))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.submit_passphrase(true, window, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new("cancel-passphrase")
+                                    .label(this.app.t("btn-cancel"))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.submit_passphrase(false, window, cx)
+                                    })),
+                            ),
+                    )
+            })
         });
-
-    if submitted {
-        if let Some(sender) = app.passphrase_sender.take() {
-            sender.send(Some(app.passphrase_input.clone())).ok();
-        }
-        app.passphrase_input.clear();
-        app.passphrase_key_path.clear();
-        app.show_passphrase_dialog = false;
+        self.passphrase
+            .update(cx, |input, cx| input.focus(window, cx));
     }
-    if cancelled {
-        if let Some(sender) = app.passphrase_sender.take() {
-            sender.send(None).ok();
+
+    pub(in crate::app::ui) fn submit_passphrase(
+        &mut self,
+        submitted: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(sender) = self.app.passphrase_sender.take() {
+            let value = submitted.then(|| self.passphrase.read(cx).value().to_string());
+            sender.send(value).ok();
         }
-        app.passphrase_input.clear();
-        app.passphrase_key_path.clear();
-        app.show_passphrase_dialog = false;
+        self.app.passphrase_input.clear();
+        self.app.passphrase_key_path.clear();
+        self.app.show_passphrase_dialog = false;
+        self.passphrase
+            .update(cx, |input, cx| input.set_value("", window, cx));
+        window.close_dialog(cx);
+        self.show_status_dialog(window, cx);
+        cx.notify();
     }
 }

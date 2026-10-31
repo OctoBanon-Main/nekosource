@@ -2,9 +2,10 @@ use super::super::error::{NekoError, NekoResult};
 use ssh_key::{LineEnding, PrivateKey};
 use std::{
     io::Write,
-    os::windows::process::CommandExt,
     path::{Path, PathBuf},
 };
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 const MAX_PASSPHRASE_RETRIES: usize = 3;
 
